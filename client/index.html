@@ -37,7 +37,7 @@
 
  let canvas = document.getElementById('canvas');
  let ctx = canvas.getContext('2d');
- ctx.linewidth = 0.5;
+ ctx.linewidth = 0.5; // move into interpreter
  ctx.globalCompositeOperation = 'lighter';
 
  let ws = new WebSocket("ws://localhost:8080");
