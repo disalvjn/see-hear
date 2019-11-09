@@ -21,11 +21,11 @@
   []
   (swap! stops conj (httpkit/run-server websocket-handler {:port 8080})))
 
-(defn send!
+(defn websocket-send!
   [obj]
   (httpkit/send! @channel (json/generate-string obj)))
 
-(defn send-view! [] (send! (state/view state)))
+(defn send-view! [] (websocket-send! (state/view state)))
 
 (defn init
   []
@@ -42,5 +42,9 @@
             (send-view!)
             (Thread/sleep 30))))
 
-(go)
-(init)
+(defn send!
+  [message]
+  (state/send! state message))
+
+;; (go)
+;; (init)
