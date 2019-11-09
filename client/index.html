@@ -2,7 +2,7 @@
  *{margin:0;padding:0;}body{background:#222;}
  canvas{
      position:absolute;
-     /* border:5px solid rgba(255,255,255,0.1); */
+     border:5px solid rgba(255,255,255,0.1); 
      /* box-shadow:inset 0 0 100px #4162a9; */
      transform:translateZ(0);
  }
@@ -11,14 +11,15 @@
 <script>
 
  function interpret(ctx, event) {
-     event.draw.forEach(item => {
-         if (item.type == 'draw' && item.shape == 'circle') {
-             ctx.fillStyle = item.color;
-             ctx.strokeStyle = item.color;
+     event.shapes.forEach(item => {
+         if (item["shape/type"] == 'circle') {
+             ctx.fillStyle = item["shape/color"];
+             ctx.strokeStyle = item["shape/color"];
+             ctx.linewidth = item["shape/line-width"]
 
              ctx.beginPath();
-             ctx.arc(item.x, item.y, item.radius, 0, Math.PI*2, true);
-             if (item.fill) {
+             ctx.arc(item["circle/x"], item["circle/y"], item["circle/radius"], 0, Math.PI*2, true);
+             if (item["circle/fill?"]) {
                  ctx.fill();
              } else {
                  ctx.stroke();
@@ -37,40 +38,31 @@
 
  let canvas = document.getElementById('canvas');
  let ctx = canvas.getContext('2d');
- ctx.linewidth = 0.5; // move into interpreter
- ctx.globalCompositeOperation = 'lighter';
+ let magic = 500;
 
  let ws = new WebSocket("ws://localhost:8080");
  ws.onmessage = function(event) {
-     /* ctx.clearRect(0, 0, 500, 500); */
+     ctx.clearRect(0, 0, magic, magic);
+     // after clearing the rectangle, this gets cleared also.
+     ctx.globalCompositeOperation = 'lighter';
      interpret(ctx, JSON.parse(event.data));
  }
 
- let magic = 500;
 
- canvas.width = 500;
- canvas.height = 500;
- canvas.style.left = (window.innerWidth - 500)/2+'px';
+ canvas.width = magic;
+ canvas.height = magic;
+ canvas.style.left = (window.innerWidth - magic)/2+'px';
 
- if(window.innerHeight>500)
-     canvas.style.top = (window.innerHeight - 500)/2+'px';
+ if(window.innerHeight>magic)
+     canvas.style.top = (window.innerHeight - magic)/2+'px';
 
  /* /*** //
   * *    particles = [],
-  * * patriclesNum = 500,
-  * *            w = 500,
-  * *            h = 500,
+  * * patriclesNum = magic,
+  * *            w = magic,
+  * *            h = magic,
   * *       colors = ['#f35d4f','#f36849','#c0d988','#6ddaf1','#f1e85b'];
   * *
-  * *
-  * * function Factory(){
-  * *   this.x =  Math.round( Math.random() * w);
-  * *   this.y =  Math.round( Math.random() * h);
-  * *   this.rad = Math.round( Math.random() * 1) + 1;
-  * *   this.rgba = colors[ Math.round( Math.random() * 3) ];
-  * *   this.vx = Math.round( Math.random() * 3) - 1.5;
-  * *   this.vy = Math.round( Math.random() * 3) - 1.5;
-  * * }
   * *
   * * function draw(){
   * *   for(var i = 0;i < patriclesNum; i++){
@@ -107,18 +99,7 @@
   * *     ctx.closePath();
   * *
   * *
-  * *     temp.x += temp.vx;
-  * *     temp.y += temp.vy;
-  * *
-  * *     if(temp.x > w)temp.x = 0;
-  * *     if(temp.x < 0)temp.x = w;
-  * *     if(temp.y > h)temp.y = 0;
-  * *     if(temp.y < 0)temp.y = h;
   * *   }
-  * * }
-  * *
-  * * function findDistance(p1,p2){
-  * *   return Math.sqrt( Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2) );
   * * }
   * *
   * *  })(); */
