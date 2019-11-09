@@ -2,6 +2,7 @@
 
 (def particle
   {:item/type :particle
+   :item/id 0
    :particle/x 0
    :particle/y 0
    :particle/vx 0
@@ -25,7 +26,11 @@
                 particle/y particle/vy
                 particle/max-x particle/max-y]} particle
         new-x (+ x vx)
-        new-y (+ y vy)]
-    (assoc particle
-           :particle/x (if (and max-x (> max-x 0) (> new-x max-x)) 0 new-x)
-           :particle/y (if (and max-y (> max-y 0) (> new-y max-y)) 0 new-y))))
+        new-y (+ y vy)
+        over-x? (and max-x (> max-x 0) (or (< new-x 0) (> new-x max-x)))
+        over-y? (and max-y (> max-y 0) (or (< new-y 0) (> new-y max-y)))]
+    (merge particle
+           {:particle/x (if over-x? x new-x)
+            :particle/y (if over-y? y new-y)}
+           (if over-x? {:particle/vx (* -1 vx)})
+           (if over-y? {:particle/vy (* -1 vy)}))))

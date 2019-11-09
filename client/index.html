@@ -15,7 +15,7 @@
          if (item["shape/type"] == 'circle') {
              ctx.fillStyle = item["shape/color"];
              ctx.strokeStyle = item["shape/color"];
-             ctx.linewidth = item["shape/line-width"]
+             ctx.lineWidth = item["shape/line-width"]
 
              ctx.beginPath();
              ctx.arc(item["circle/x"], item["circle/y"], item["circle/radius"], 0, Math.PI*2, true);
@@ -26,11 +26,12 @@
              }
              ctx.closePath();
 
-         } else if (item.type == 'draw' && item.shape == 'line') {
-             ctx.strokeStyle = item.color;
+         } else if (item["shape/type"] == 'line') {
+             ctx.strokeStyle = item["shape/color"];
+             ctx.lineWidth = item["shape/line-width"]
              ctx.beginPath();
-             ctx.moveTo(item["from-x"], item["from-y"]);
-             ctx.lineTo(item["to-x"], item["to-y"]);
+             ctx.moveTo(item["line/from-x"], item["line/from-y"]);
+             ctx.lineTo(item["line/to-x"], item["line/to-y"]);
              ctx.stroke();
          }
      });
@@ -38,7 +39,7 @@
 
  let canvas = document.getElementById('canvas');
  let ctx = canvas.getContext('2d');
- let magic = 500;
+ let magic = 800;
 
  let ws = new WebSocket("ws://localhost:8080");
  ws.onmessage = function(event) {
@@ -57,13 +58,6 @@
      canvas.style.top = (window.innerHeight - magic)/2+'px';
 
  /* /*** //
-  * *    particles = [],
-  * * patriclesNum = magic,
-  * *            w = magic,
-  * *            h = magic,
-  * *       colors = ['#f35d4f','#f36849','#c0d988','#6ddaf1','#f1e85b'];
-  * *
-  * *
   * * function draw(){
   * *   for(var i = 0;i < patriclesNum; i++){
   * *     var temp = particles[i];
@@ -85,9 +79,6 @@
   * *     }
   * *
   * *
-  * *     ctx.fillStyle = temp.rgba;
-  * *     ctx.strokeStyle = temp.rgba;
-  * *
   * *     ctx.beginPath();
   * *     ctx.arc(temp.x, temp.y, temp.rad*factor, 0, Math.PI*2, true);
   * *     ctx.fill();
@@ -97,10 +88,5 @@
   * *     ctx.arc(temp.x, temp.y, (temp.rad+5)*factor, 0, Math.PI*2, true);
   * *     ctx.stroke();
   * *     ctx.closePath();
-  * *
-  * *
-  * *   }
-  * * }
-  * *
   * *  })(); */
 </script>

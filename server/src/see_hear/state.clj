@@ -3,44 +3,65 @@
 (defn state
   []
   {:state/items (atom {})
-   :state/views (atom [])
+   :state/renders (atom [])
    :state/processes (atom [])})
 
 (defn step!
   [{:keys [state/items state/processes]}]
   (doseq [process @processes]
     (if-let [items-state (get @items (:process/item-type process))]
-      (swap! items-state (:process/step process))
-      (swap! items assoc (atom ((:process/step nil)))))))
+      (swap! items-state #((:process/step process) (:process/state process) %))
+      (swap! items assoc (:process/item-type process)
+             (atom ((:process/step process) (:process/state process) nil))))))
 
 (defn send!
-  [{:keys [state/items state/processes]} [message-type & args]]
-  (let [applicable-processes (filter #(get (:process/messages %) message-type) @processes)]
+  [{:keys [state/items state/processes state/renders]} [message-type & args]]
+  (let [applicable-processes (filter #(get @(:process/messages %) message-type) 
+                                     @processes)
+        applicable-renders (filter #(get @(:render/messages %) message-type)
+                                   @renders)]
+    (doseq [render applicable-renders]
+      (apply (get @(:render/messages render) 
+                  message-type)
+             (:render/state render)
+             args))
     (doseq [process applicable-processes]
-      (let [message-handler (get-in process [:process/messages message-type])
+      (let [message-handler (get @(:process/messages process) 
+                                 message-type)
             item-type (:process/item-type process)]
         (do 
           (when (not (get @items item-type))
             (swap! items assoc item-type (atom nil)))
           (apply message-handler (:process/state process) (get @items item-type) args))))))
 
-(defn register-process!
+(defn add-process!
   [state process]
   (swap! (:state/processes state) conj process))
 
-(defn register-view!
-  [state view]
-  (swap! (:state/views state) conj view))
+(defn drop-process!
+  [state process-type]
+  (swap! (:state/processes state) 
+         (partial filter #(not= process-type (:process/type %)))))
+
+(defn add-render!
+  [state render]
+  (swap! (:state/renders state) conj render))
+
+(defn drop-render!
+  [state render-type]
+  (swap! (:state/renders state)
+         (partial filter #(not= render-type (:render/type %)))))
 
 (defn obliterate!
   [state]
   (reset! (:state/items state) {})
   (reset! (:state/processes state) [])
-  (reset! (:state/views state) []))
+  (reset! (:state/renders state) []))
 
-(defn view
+(defn render
   [state]
   (apply merge-with into
-         (map (fn [{:keys [view/return-type view/item-type view/view]}]
-                {return-type (view @(get @(:state/items state) item-type))}) 
-              @(:state/views state))))
+         (map (fn [{:keys [render/return-type render/item-type render/render] :as renderer}]
+                {return-type (render (some-> (:render/state renderer) deref) 
+                                     @(get @(:state/items state) item-type))}) 
+              @(:state/renders state))))
