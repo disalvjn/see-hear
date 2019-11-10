@@ -7,10 +7,10 @@
 (defn particle-blob
   []
   {:render/type :particle-blob
-   :render/item-type :particle
+   :component/item-type :particle
    :render/return-type :shapes
    :render/render 
-   (fn [this-state particles]
+   (fn [this-state views particles]
      (map (fn [{:keys [particle/color particle/x particle/y particle/radius]}]
             (-> shape/circle
                 (assoc :shape/color color
@@ -21,4 +21,4 @@
                        :circle/fill? true)))
           particles))
    :render/messages particle-blob-message-handler
-   :render/state (atom {})})
+   :component/state (atom {})})

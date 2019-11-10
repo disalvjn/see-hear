@@ -8,8 +8,8 @@
 (defn particle-mover
   []
   {:process/type :particle-mover
-   :process/item-type :particle
-   :process/step (fn [this-state particles] 
+   :component/item-type :particle
+   :process/step (fn [this-state views particles] 
                    (map (:particle-mover/move-strategy @this-state) particles))
-   :process/state (atom {:particle-mover/move-strategy particle/move})
+   :component/state (atom {:particle-mover/move-strategy particle/move})
    :process/messages particle-mover-message-handler})

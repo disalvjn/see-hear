@@ -6,7 +6,8 @@
             [see-hear.process.particle-mover :as particle-mover]
             [see-hear.state :as state]
             [see-hear.render.particle-blob :as particle-blob]
-            [see-hear.render.particle-connector :as particle-connector]))
+            [see-hear.render.particle-connector :as particle-connector]
+            [see-hear.view.particle-distance :as particle-distance]))
 
 (defonce channel (atom nil))
 (defonce stops (atom []))
@@ -35,12 +36,15 @@
   (state/add-process! state (particle-creator/particle-creator {}))
   (state/add-process! state (particle-mover/particle-mover))
   (state/add-render! state (particle-blob/particle-blob))
+  (state/add-render! state (particle-connector/particle-connector [:closest 3]))
   (state/send! state [:particle-creator/create 2]))
 
 (defn spawn-render!
   []
   (future (while @loop?
-            (state/step! state)
+            (try
+              (state/step! state)
+              (catch Exception _))
             (send-render!)
             (Thread/sleep @delay))))
 
