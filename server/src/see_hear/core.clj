@@ -7,7 +7,8 @@
             [see-hear.state :as state]
             [see-hear.render.particle-blob :as particle-blob]
             [see-hear.render.particle-connector :as particle-connector]
-            [see-hear.view.particle-distance :as particle-distance]))
+            [see-hear.view.particle-distance :as particle-distance]
+            [see-hear.render.particle-centroid :as particle-centroid]))
 
 (defonce channel (atom nil))
 (defonce stops (atom []))

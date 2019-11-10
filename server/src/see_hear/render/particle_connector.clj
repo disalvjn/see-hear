@@ -26,9 +26,7 @@
    (fn [this-state views particles]
      (let [{:keys [line-width]} this-state
            id->particle (util/index-by :item/id particles)
-           particle-distance (->> views
-                                  :particle-distance
-                                  (util/map-value #(sort-by :particle-distance/distance %)))
+           particle-distance (:particle-distance views)
            particle-pairs 
            (match/match (:strategy this-state)
              [:all] (for [p1 particles, p2 particles 

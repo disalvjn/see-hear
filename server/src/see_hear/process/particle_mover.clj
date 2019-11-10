@@ -15,7 +15,7 @@
    :component/item-type :particle
    :process/step (fn [this-state views particles] 
                    (map (:particle-mover/move-strategy @this-state) particles))
-   :component/state (atom {:particle-mover/move-strategy particle/move})
+   :component/state (atom {:particle-mover/move-strategy particle/move-bounce})
    :process/messages particle-mover-message-handler})
 
 (defn swap-particles!
@@ -23,9 +23,9 @@
   (swap! particles-state #(mapv f %)))
 
 (swap! particle-mover-message-handler
-       assoc :particle-mover/strategy
+       assoc :particle-mover/move-strategy
        (fn [this-state particles-state strategy]
-         (swap! this-state update :particle-mover/move-strategy (strategy-map strategy))))
+         (swap! this-state assoc :particle-mover/move-strategy (strategy-map strategy))))
 
 (swap! particle-mover-message-handler
        assoc :particle-mover/accelerate
@@ -46,18 +46,10 @@
                          :particle/vx 0
                          :particle/vy 0)))))
 
-(defn square [x] (* x x))
 
 (swap! particle-mover-message-handler
        assoc :particle-mover/scatter
        (fn [this-state particles-state]
          (swap-particles! 
           particles-state 
-          (fn [{:keys [particle/vx particle/vy] :as particle}]
-            (let [old-magnitude (Math/sqrt (+ (* vx vx) (* vy vy)))
-                  new-vx (* old-magnitude (rand))
-                  new-vy (Math/sqrt (- (square old-magnitude)
-                                       (square new-vx)))]
-              (assoc particle
-                     :particle/vx new-vx
-                     :particle/vy new-vy))))))
+          particle/scatter-preserving-magnitude)))
