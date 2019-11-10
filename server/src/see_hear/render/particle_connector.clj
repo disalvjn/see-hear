@@ -41,6 +41,15 @@
                                      (map :particle-distance/to))]
                          (for [p2 ps]
                            [p1 p2])))
+                     particles)
+             
+             [:absolute dist]
+             (mapcat (fn [p1]
+                       (let [ps (->> (get particle-distance (:item/id p1))
+                                     (take-while #(< (:particle-distance/distance %) dist))
+                                     (map :particle-distance/to))]
+                         (for [p2 ps]
+                           [p1 p2])))
                      particles))]
        (map (fn [[p1 p2]] (line-between line-width p1 p2)) particle-pairs)))
    
@@ -59,3 +68,7 @@
 (swap! particle-connector-message-handler
        assoc :particle-connector/line-width
        (fn [this-state width] (swap! this-state assoc :line-width width)))
+
+(swap! particle-connector-message-handler
+       assoc :particle-connector/strategy
+       (fn [this-state strategy] (swap! this-state assoc :strategy strategy)))

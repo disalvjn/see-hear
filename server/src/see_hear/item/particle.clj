@@ -20,7 +20,7 @@
     (Math/pow (- (:particle/x particle1) (:particle/x particle2)) 2)
     (Math/pow (- (:particle/y particle1) (:particle/y particle2)) 2))))
 
-(defn move
+(defn move-bounce
   [particle]
   (let [{:keys [particle/x particle/vx
                 particle/y particle/vy
@@ -32,5 +32,18 @@
     (merge particle
            {:particle/x (if over-x? x new-x)
             :particle/y (if over-y? y new-y)}
-           (if over-x? {:particle/vx (* -1 vx)})
-           (if over-y? {:particle/vy (* -1 vy)}))))
+           (if over-x? {:particle/vx (* -1 vx)} nil)
+           (if over-y? {:particle/vy (* -1 vy)} nil))))
+
+(defn move-wrap
+  [particle]
+  (let [{:keys [particle/x particle/vx
+                particle/y particle/vy
+                particle/max-x particle/max-y]} particle
+        new-x (+ x vx)
+        new-y (+ y vy)
+        over-x? (and max-x (> max-x 0) (or (< new-x 0) (> new-x max-x)))
+        over-y? (and max-y (> max-y 0) (or (< new-y 0) (> new-y max-y)))]
+    (merge particle
+           {:particle/x (if over-x? 0 new-x)
+            :particle/y (if over-y? 0 new-y)})))

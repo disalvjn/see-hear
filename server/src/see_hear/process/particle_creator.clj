@@ -32,11 +32,11 @@
                                 :item/id (rand-int 2100000000)
                                 :particle/x (rand-int max-x)
                                 :particle/y (rand-int max-y)
-                                :particle/vx (* 3 (rand))
-                                :particle/vy (* 3 (rand))
+                                :particle/vx (+ 5 (* 3 (rand)))
+                                :particle/vy (+ 5 (* 3 (rand)))
                                 :particle/max-x max-x
                                 :particle/max-y max-y
-                                :particle/radius (* 8 (rand))
+                                :particle/radius (+ 10 (* 8 (rand)))
                                 :particle/color (util/random-color 0.5 0.95)))
                        (range 0 number-of-particles))))))
 

@@ -44,8 +44,8 @@
   (future (while @loop?
             (try
               (state/step! state)
+              (send-render!)
               (catch Exception _))
-            (send-render!)
             (Thread/sleep @delay))))
 
 (defn send!
