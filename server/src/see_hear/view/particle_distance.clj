@@ -22,4 +22,4 @@
          :particle-distance/distance 
          (particle/distance p1 p2)})
       (group-by :particle-distance/from)
-      (util/map-value #(sort-by :particle-distance/distance))))})
+      (util/map-value #(sort-by :particle-distance/distance %))))})
