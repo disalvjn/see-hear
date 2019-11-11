@@ -1,6 +1,6 @@
 (ns see-hear.state
-  (:require [see-hear.view :as view]
-            [see-hear.util :as util]))
+  (:require [see-hear.util :as util]
+            [see-hear.component :as component]))
 
 (defn state
   []
@@ -40,13 +40,13 @@
                 requested-process-views)]
 
     (doseq [unbuilt-view-type unbuilt-views]
-      (let [view-agent (view/create unbuilt-view-type)
+      (let [view-agent (component/create unbuilt-view-type)
             items (get @items (:component/item-type view-agent))]
         (swap! views assoc 
                unbuilt-view-type
                {:view view-agent
                 :value (if items 
-                         ((:view/view view-agent) (:component/state view-agent) @items)
+                         (@(:component/work view-agent) (:component/state view-agent) @items)
                          nil)})))))
 
 (defn update-views!
@@ -55,7 +55,7 @@
     (swap! (:state/views state) 
            assoc view-type 
            {:view view 
-            :value ((:view/view view) 
+            :value (@(:component/work view) 
                     (:component/state view) 
                     @(get @(:state/items state) (:component/item-type view)))})))
 
@@ -64,12 +64,12 @@
   (build-unbuilt-views! state @processes)
   (doseq [process @processes]
     (if-let [items-state (get @items (:component/item-type process))]
-      (swap! items-state #((:process/step process) 
+      (swap! items-state #(@(:component/work process) 
                            (:component/state process) 
                            (views-for state process)
                            %))
       (swap! items assoc (:component/item-type process)
-             (atom ((:process/step process) 
+             (atom (@(:component/work process) 
                     (:component/state process) 
                     (views-for state process)
                     nil)))))
@@ -77,17 +77,17 @@
 
 (defn send!
   [{:keys [state/items state/processes state/renders]} [message-type & args]]
-  (let [applicable-processes (filter #(get @(:process/messages %) message-type) 
+  (let [applicable-processes (filter #(get @(:component/messages %) message-type) 
                                      @processes)
-        applicable-renders (filter #(get @(:render/messages %) message-type)
+        applicable-renders (filter #(get @(:component/messages %) message-type)
                                    @renders)]
     (doseq [render applicable-renders]
-      (apply (get @(:render/messages render) 
+      (apply (get @(:component/messages render) 
                   message-type)
              (:component/state render)
              args))
     (doseq [process applicable-processes]
-      (let [message-handler (get @(:process/messages process) 
+      (let [message-handler (get @(:component/messages process) 
                                  message-type)
             item-type (:component/item-type process)]
         (do 
@@ -100,18 +100,18 @@
   (swap! (:state/processes state) conj process))
 
 (defn drop-process!
-  [state process-type]
+  [state process-name]
   (swap! (:state/processes state) 
-         (partial filter #(not= process-type (:process/type %)))))
+         (partial filter #(not= process-name (:component/name %)))))
 
 (defn add-render!
   [state render]
   (swap! (:state/renders state) conj render))
 
 (defn drop-render!
-  [state render-type]
+  [state render-name]
   (swap! (:state/renders state)
-         (partial filter #(not= render-type (:render/type %)))))
+         (partial filter #(not= render-name (:component/name %)))))
 
 (defn obliterate!
   [state]
@@ -124,9 +124,9 @@
   [state]
   (build-unbuilt-views! state @(:state/renders state))
   (apply merge-with into
-         (map (fn [{:keys [render/return-type component/item-type render/render] :as renderer}]
-                {return-type (render 
-                              (some-> (:component/state renderer) deref) 
-                              (views-for state renderer)
-                              @(get @(:state/items state) item-type))}) 
+         (map (fn [{:keys [component/return component/item-type component/work] :as renderer}]
+                {return (@work
+                         (some-> (:component/state renderer) deref)
+                         (views-for state renderer)
+                         @(get @(:state/items state) item-type))}) 
               @(:state/renders state))))
