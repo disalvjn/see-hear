@@ -28,7 +28,7 @@
                          :particle/vy (+ 5 (* 3 (rand)))
                          :particle/max-x max-x
                          :particle/max-y max-y
-                         :particle/radius (+ 10 (* 8 (rand)))
+                         :particle/radius 10
                          :particle/color (util/random-color 0.5 0.95)))
                 (range 0 number-of-particles)))))
 
