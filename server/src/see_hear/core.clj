@@ -192,65 +192,91 @@
 
 (websocket-send! image)
 
-(def fur-background "#fffacd")
-(def ear-color "#f0e68c")
-(def tongue-red "#ff6c52")
-(def snout-charcoal "#4a4a4a")
-(def tooth-color "#fffafa")
-(def eye-color "#f4a460")
+(let [fur-background "#fffacd"
+      ear-color "#f0e68c"
+      tongue-red "#f08080"
+      snout-charcoal "#4a4a4a"
+      tooth-color "#fffafa"
+      eye-color "#f4a460"
 
-(websocket-send!
- (as-> (cell [12 12]
-             [
+      bone-2-color "#e6e6fa"
+
+      background-1 "#6495ed"
+      background-2 "#8fbc8f"]
+
+  (websocket-send!
+   (as-> (cell [12 12]
+               [;; empty space background
+    ;          (render (polygon [0 0] [12 12] [12 0]) background-2)
+                
+                (render (polygon [0 0] [0 12] [6 6]) background-1)
+                (render (polygon [0 0] [12 0] [6 6]) background-2)
+                (render (polygon [12 12] [12 0] [6 6]) background-1)
+                (render (polygon [12 12] [0 12] [6 6]) background-2)
+
+              ; (render (polygon [0 10] [0 12] [12 12]) background-2)
+              ; (render (polygon [10 0] [12 0] [12 12]) background-1)
+                
               ;; fur background
-              (render (polygon [0 1] [0 5] [4 7] [7 9] [9 7] [7 4] [5 0] [1 0]) fur-background)
+                (render (polygon [0 1] [0 5] [4 7] [7 9] [9 7] [7 4] [5 0] [1 0]) fur-background)
 
               ;; left eye
-              (render (polygon [2 4] [2 5] [3 5] [3 4]) eye-color)
+                (render (polygon [2 4] [2 5] [3 5] [3 4]) eye-color)
               ;; right eye
-              (render (polygon [4 2] [4 3] [5 3] [5 2]) eye-color)
+                (render (polygon [4 2] [4 3] [5 3] [5 2]) eye-color)
               ;; left ear
-              (render (polygon [0 2] [0 5] [3 7] [1 2]) ear-color)
+                (render (polygon [0 2] [0 5] [3 7] [1 2]) ear-color)
               ;; ear completion by left tongue
-              (render (polygon [7 12] [8 12] [8 11]) ear-color)
+                (render (polygon [7 12] [10 12] [10 11]) ear-color)
               ;; right ear
-              (render (polygon [2 0] [2 1] [7 3] [5 0]) ear-color)
+                (render (polygon [2 0] [2 1] [7 3] [5 0]) ear-color)
               ;; ear completion by right tongue
-              (render (polygon [12 7] [12 8] [11 8]) ear-color)
+                (render (polygon [12 7] [12 10] [11 10]) ear-color)
 
               ;; tongue
-              (render (polygon [6 6] [6 8] [8 12] [12 12] [12 8] [8 6]) tongue-red)
+                (render (polygon [6 6] [6 8] [9 12] [12 12] [12 9] [8 6]) tongue-red)
               ;; tongue completion above head
-              (render (polygon [0 0] [1 0] [0 1]) tongue-red)
+              ; (render (polygon [0 0] [1 0] [0 1]) tongue-red)
+                
+              ;; bone 2 core
+                (render (polygon [9 10] [11 12] [12 12] [12 11] [10 9]) bone-2-color)
+              ;; bone 2 core completion
+                (render (polygon [0 0] [1 0] [0 1]) bone-2-color)
+                (render (circle [9 10] 0.75) bone-2-color)
+                (render (circle [10 9] 0.75) bone-2-color)
+
 
               ;; snout
-              (render (polygon [4 5] [4.5 6.5] [6.5 4.5] [5 4]) snout-charcoal)
+                (render (polygon [4 5] [4.5 6.5] [6.5 4.5] [5 4]) snout-charcoal)
 
               ;; left tooth
-              (render (translate [-0.5 -0.5] (polygon [5 8] [6 9] [8 10] [6 7])) tooth-color)
+                (render (translate [-0.5 -0.5] (polygon [5 8] [6 9] [8 10] [6 7])) tooth-color)
               ;; right tooth
-              (render (translate [-0.5 -0.5] (polygon [8 5] [7 6] [10 8] [9 6])) tooth-color)
+                (render (translate [-0.5 -0.5] (polygon [8 5] [7 6] [10 8] [9 6])) tooth-color)
 
-              
+
               ;; left bone core
-              (render (polygon [1 12] [3 10] [2 9] [0 11] [0 12]) tooth-color)
+                (render (polygon [1 12] [3 10] [2 9] [0 11] [0 12]) tooth-color)
               ;; left bone core completion
-              (render (polygon [11 0] [12 0] [12 1]) tooth-color)
+                (render (polygon [11 0] [12 0] [12 1]) tooth-color)
               ;; left bone left circle
-              (render (circle [2 8] 0.75) tooth-color)
+                (render (circle [2 9] 0.75) tooth-color)
               ;; left bone right circle
-              (render (circle [4 10] 0.75) tooth-color)
-              
-              ;; paw print core
-              (render (circle [10 2] 1.25) snout-charcoal)
-              (render (circle [8 2] 0.70) snout-charcoal)
-              (render (circle [8.5 3.5] 0.70) snout-charcoal)
-              (render (circle [10 4] 0.70) snout-charcoal)
+                (render (circle [3 10] 0.75) tooth-color)
 
-              
-              ])$
-   (tile-cell [:glide {:axis :x :double? true}] $)
-   (tiled-cell->image $ 30 [5 5])
-   (assoc $ :image/background-color "#add8e6")))
+              ;; paw print core
+                (render (circle [10 2] 1.25) snout-charcoal)
+                (render (circle [8 2] 0.70) snout-charcoal)
+                (render (circle [8.5 3.5] 0.70) snout-charcoal)
+                (render (circle [10 4] 0.70) snout-charcoal)
+
+              ;; small paw print 1
+                (render (circle [6 11] 0.8) snout-charcoal)
+                (render (circle [5 10] 0.5) snout-charcoal)
+                (render (circle [6 9.5] 0.5) snout-charcoal)
+                (render (circle [7 10] 0.5) snout-charcoal)]) $
+     (tile-cell [:glide {:double? true}] $)
+     (tile-cell [:mirror {:axis :x :stagger? true}] $)
+     (tiled-cell->image $ 7 [10 10]))))
 
 (go)
