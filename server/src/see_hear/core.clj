@@ -9,7 +9,8 @@
             [see-hear.render.particle-connector :as particle-connector]
             [see-hear.view.particle-distance :as particle-distance]
             [see-hear.render.particle-centroid :as particle-centroid]
-            [see-hear.util :as util]))
+            [see-hear.util :as util]
+            [clojure.core.match :refer [match]]))
 
 (defonce channel (atom nil))
 (defonce stops (atom []))
@@ -32,100 +33,224 @@
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(defn line [from-x from-y to-x to-y]
-  (let [m (/ (- to-y from-y) (- to-x from-x))
-        f (fn [x] (+ from-y (* m (- x from-x))))]
-    {:line/from-x 0, :line/from-y 0, :line/to-x 400, :line/to-y 800, :line/f f}))
+;; todo: handle vertical lines by attaching below? above? to the line?
 
-(defn below?
-  [line]
-  (fn [x y]
-    (> ((:line/f line) x) y)))
+(defn point [[x y]]
+  {:point/x x, :point/y y})
 
-(defn above?
-  [line]
-  (fn [x y]
-    (< ((:line/f line) x) y)))
+(defn translate-point
+  [[x y] point]
+  (-> point (update :point/x + x) (update :point/y + y)))
 
-(defn rules->color
-  [rules x y]
-  (->> rules 
-       (filter (fn [rule] 
-                 (every? (fn [pred] (pred x y))
-                         (:rule/and rule))))
-       first
-       :rule/color))
+(defn reflect-x
+  [x-axis {:keys [point/x point/y]}]
+  (point [(+ x (* 2 (- x-axis x))) y]))
+
+(defn reflect-y
+  [y-axis {:keys [point/x point/y]}]
+  (point [x (+ y (* 2 (- y-axis y)))]))
+
+(defn polygon
+  [p1 p2 p3 & ps]
+  {:shape/type :polygon
+   :polygon/points (mapv point (into [p1 p2 p3] ps))})
+
+(defn circle
+  [center radius & [{:keys [start-degree end-degree]}]]
+  {:shape/type :circle
+   :circle/center (point center)
+   :circle/radius radius
+   :circle/start (Math/toRadians (or start-degree 0))
+   :circle/end (Math/toRadians (or end-degree 360))})
+
+(defn render
+  [shape color]
+  {:render/color color
+   :render/shape shape})
+
+(defn cell
+  [[grid-x grid-y] renders]
+  {:cell/grid-x grid-x
+   :cell/grid-y grid-y
+   :cell/renders renders})
+
+(defmulti translate (fn [[x y] shape] (:shape/type shape)))
+
+(defmulti reflect (fn [axis-type axis-point shape] (:shape/type shape)))
+
+(defmulti apply-grid (fn [grid-factor shape] (:shape/type shape)))
+
+(defmulti tile-cell (fn [[strategy-name options] cell] strategy-name))
+
+(defn apply-grid-to-point 
+  [grid-factor point]
+    (-> point (update :point/x * grid-factor) (update :point/y * grid-factor)))
+
+(defmethod apply-grid :polygon
+  [grid-factor polygon]
+  (update polygon :polygon/points (partial map (partial apply-grid-to-point grid-factor))))
+
+(defmethod translate :polygon
+  [coords polygon]
+  (update polygon :polygon/points (partial map (partial translate-point coords))))
+
+(defmethod reflect :polygon
+  [axis-type axis-point polygon]
+  (let [reflect-fn (case axis-type
+                     :x (partial reflect-x axis-point)
+                     :y (partial reflect-y axis-point))]
+  (update polygon :polygon/points #(map reflect-fn %))))
+
+(defmethod apply-grid :circle
+  [grid-factor circle]
+  (-> circle 
+      (update :circle/center (partial apply-grid-to-point grid-factor))
+      (update :circle/radius * grid-factor)))
+
+(defmethod translate :circle
+  [coords circle]
+  (update circle :circle/center (partial translate-point coords)))
+
+(defmethod reflect :circle
+  [axis-type axis-point circle]
+  (let [reflect-fn (case axis-type
+                     :x (partial reflect-x axis-point)
+                     :y (partial reflect-y axis-point))
+        rad-offset (case axis-type
+                     :x (/ Math/PI 4)
+                     :y (* 3 (/ Math/PI 4)))]
+    (-> circle
+        (update :circle/center reflect-fn)
+        (update :circle/start + rad-offset)
+        (update :circle/end + rad-offset))))
+
+(defn map-shapes
+  [f renders]
+  (map (fn [render] (update render :render/shape f)) renders))
+
+(defmethod tile-cell :mirror
+  [[_ {:keys [axis stagger?]}] {:keys [cell/grid-x cell/grid-y cell/renders]}]
+  (let [new-y (if (or (= axis :y) stagger?) (* 2 grid-y) grid-y)
+        new-x (if (or (= axis :x) stagger?) (* 2 grid-x) grid-x)
+        reflect-fn (case axis
+                     :x (partial reflect :x grid-x)
+                     :y (partial reflect :y grid-y))
+        reflected-renders (map-shapes reflect-fn renders)
+        translate-reflected
+        (case axis
+          :x [(* -1 grid-x) grid-y]
+          :y [grid-x (* -1 grid-y)])
+        staggered-renders (if stagger? 
+                            (concat (map-shapes (partial translate [grid-x grid-y]) renders)
+                                    (map-shapes (partial translate translate-reflected) reflected-renders))) ]
+    (cell [new-x new-y] (concat renders reflected-renders staggered-renders))))
+
+(defmethod tile-cell :glide
+  [[_ {:keys [axis double?]}] {:keys [cell/grid-x cell/grid-y cell/renders]}]
+  (let [new-y (if (or (= axis :y) double?) (* 2 grid-y) grid-y)
+        new-x (if (or (= axis :x) double?) (* 2 grid-x) grid-x)
+        reflect-over-x (comp (partial translate [grid-x (* -1 grid-y)]) (partial reflect :y grid-y))
+        reflect-over-y (comp (partial translate [(* -1 grid-x) grid-y]) (partial reflect :x grid-x))
+        double-reflect (comp (partial reflect :x grid-x) (partial reflect :y grid-y))]
+    (cell [new-x new-y]
+          (concat renders
+                  (if (or double? (= axis :x)) (map-shapes reflect-over-x renders))
+                  (if (or double? (= axis :y)) (map-shapes reflect-over-y renders))
+                  (if double? (map-shapes double-reflect renders))))))
+
+(defn tiled-cell->image
+  [tiled-cell grid-factor [repetitions-x repetitions-y]]
+  (let [{:keys [cell/grid-x cell/grid-y cell/renders]} tiled-cell
+        cell-height (* grid-y grid-factor)
+        cell-width (* grid-x grid-factor)
+        height (* cell-height repetitions-y )
+        width (* cell-width repetitions-x )
+        gridded-renders (map-shapes (partial apply-grid grid-factor) renders)
+        repeated-renders (->> (for [i (range 0 repetitions-x)
+                                    j (range 0 repetitions-y)]
+                                (map-shapes (partial translate [(* cell-width i) (* cell-height j)]) gridded-renders))
+                              (reduce into []))]
+    {:image/height height
+     :image/width width
+     :image/renders repeated-renders}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(def line-A (line 0 0 500 800))
-(def line-B (line 600 700 200 300))
+(def color-1 (util/random-color 0.5 0.96))
+(def color-2 (util/random-color 0.5 0.96))
 
-(def c-below-A-B (util/random-color 0.5 0.95))
-(def c-above-A-B (util/random-color 0.5 0.95))
-(def c-below-A-above-B (util/random-color 0.5 0.95))
-(def c-above-A-below-B (util/random-color 0.5 0.95))
+(def cell-1
+  (cell [10 10]
+        [(render (polygon [0 0] [5 5] [5 0]) color-1)
+         (render (polygon [10 10] [5 5] [10 0]) color-2)]))
 
-(def rules 
-  [{:rule/and [(below? line-A) (below? line-B)],
-    :rule/color c-below-A-B},
-   {:rule/and [(below? line-A) (above? line-B)]
-    :rule/color c-below-A-above-B}
-   {:rule/and [(above? line-A) (below? line-B)],
-    :rule/color c-above-A-below-B}
-   {:rule/and [(above? line-A) (above? line-B)]
-    :rule/color c-above-A-B } ])
 
-(def data 
-  {:height 800,
-   :width 800,
-   :pixels (for [x (range 0 750), y (range 0 750)]
-             {:pixel/x x, :pixel/y y, :pixel/color (rules->color rules x y)}
-             )
-   })
+(def tile-1 (tile-cell [:mirror {:axis :x :stagger? true}] cell-1))
 
-(websocket-send! data)
+(def image 
+  (tiled-cell->image tile-1 20 [3 3]))
+
+(websocket-send! image)
+
+(def fur-background "#fffacd")
+(def ear-color "#f0e68c")
+(def tongue-red "#ff6c52")
+(def snout-charcoal "#4a4a4a")
+(def tooth-color "#fffafa")
+(def eye-color "#f4a460")
+
+(websocket-send!
+ (as-> (cell [12 12]
+             [
+              ;; fur background
+              (render (polygon [0 1] [0 5] [4 7] [7 9] [9 7] [7 4] [5 0] [1 0]) fur-background)
+
+              ;; left eye
+              (render (polygon [2 4] [2 5] [3 5] [3 4]) eye-color)
+              ;; right eye
+              (render (polygon [4 2] [4 3] [5 3] [5 2]) eye-color)
+              ;; left ear
+              (render (polygon [0 2] [0 5] [3 7] [1 2]) ear-color)
+              ;; ear completion by left tongue
+              (render (polygon [7 12] [8 12] [8 11]) ear-color)
+              ;; right ear
+              (render (polygon [2 0] [2 1] [7 3] [5 0]) ear-color)
+              ;; ear completion by right tongue
+              (render (polygon [12 7] [12 8] [11 8]) ear-color)
+
+              ;; tongue
+              (render (polygon [6 6] [6 8] [8 12] [12 12] [12 8] [8 6]) tongue-red)
+              ;; tongue completion above head
+              (render (polygon [0 0] [1 0] [0 1]) tongue-red)
+
+              ;; snout
+              (render (polygon [4 5] [4.5 6.5] [6.5 4.5] [5 4]) snout-charcoal)
+
+              ;; left tooth
+              (render (translate [-0.5 -0.5] (polygon [5 8] [6 9] [8 10] [6 7])) tooth-color)
+              ;; right tooth
+              (render (translate [-0.5 -0.5] (polygon [8 5] [7 6] [10 8] [9 6])) tooth-color)
+
+              
+              ;; left bone core
+              (render (polygon [1 12] [3 10] [2 9] [0 11] [0 12]) tooth-color)
+              ;; left bone core completion
+              (render (polygon [11 0] [12 0] [12 1]) tooth-color)
+              ;; left bone left circle
+              (render (circle [2 8] 0.75) tooth-color)
+              ;; left bone right circle
+              (render (circle [4 10] 0.75) tooth-color)
+              
+              ;; paw print core
+              (render (circle [10 2] 1.25) snout-charcoal)
+              (render (circle [8 2] 0.70) snout-charcoal)
+              (render (circle [8.5 3.5] 0.70) snout-charcoal)
+              (render (circle [10 4] 0.70) snout-charcoal)
+
+              
+              ])$
+   (tile-cell [:glide {:axis :x :double? true}] $)
+   (tiled-cell->image $ 30 [5 5])
+   (assoc $ :image/background-color "#add8e6")))
 
 (go)
-
-; (defn send-render! [] (websocket-send! (state/render state)))
-
-; (defn init
-;   []
-;   (state/obliterate! state)
-;   (state/add-process! state (particle-creator/particle-creator {}))
-;   (state/add-process! state (particle-mover/particle-mover))
-;   (state/add-render! state (particle-blob/particle-blob))
-;   (state/add-render! state (particle-connector/particle-connector [:closest 3]))
-;   (state/send! state [:particle-creator/create 2]))
-
-; (defn spawn-render!
-;   []
-;   (future (while @loop?
-;             (try
-;               (state/step! state)
-;               (send-render!)
-;               (catch Exception _))
-;             (Thread/sleep @delay))))
-
-; (defn send!
-;   [message]
-;   (state/send! state message))
-
-; (defn add-render!
-;   [renderer]
-;   (state/add-render! state renderer))
-
-; (defn drop-render!
-;   [render-type]
-;   (state/drop-render! state render-type))
-
-; (defn add-process!
-;   [process]
-;   (state/add-process! state process))
-
-; (defn drop-process
-;   [process-type]
-;   (state/drop-process! process-type))
-
-;; (go)
