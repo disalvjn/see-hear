@@ -1,10 +1,8 @@
 <style>
-     b {
-         color: #ffffa4;
-         color: #ffffa5;
-     }
 </style>
 <canvas id="canvas"></canvas>
+<p></p>
+<a id="download" download="myImage.png" href="" onclick="download_img(this);">Download to myImage.jpg</a>
 <script>
 
  function interpret(ctx, image) {
@@ -55,6 +53,11 @@
      }
      interpret(ctx, data);
  }
+
+download_img = function(el) {
+  var image = canvas.toDataURL("image/png");
+  el.href = image;
+};
 
 </script>
 

@@ -159,12 +159,12 @@
                   (if double? (map-shapes double-reflect renders))))))
 
 (defn tiled-cell->image
-  [tiled-cell grid-factor [repetitions-x repetitions-y]]
+  [tiled-cell grid-factor [width height]]
   (let [{:keys [cell/grid-x cell/grid-y cell/renders]} tiled-cell
         cell-height (* grid-y grid-factor)
         cell-width (* grid-x grid-factor)
-        height (* cell-height repetitions-y )
-        width (* cell-width repetitions-x )
+        repetitions-x (Math/ceil (/ width cell-width))
+        repetitions-y (Math/ceil (/ height cell-height))
         gridded-renders (map-shapes (partial apply-grid grid-factor) renders)
         repeated-renders (->> (for [i (range 0 repetitions-x)
                                     j (range 0 repetitions-y)]
@@ -176,22 +176,6 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(def color-1 (util/random-color 0.5 0.96))
-(def color-2 (util/random-color 0.5 0.96))
-
-(def cell-1
-  (cell [10 10]
-        [(render (polygon [0 0] [5 5] [5 0]) color-1)
-         (render (polygon [10 10] [5 5] [10 0]) color-2)]))
-
-
-(def tile-1 (tile-cell [:mirror {:axis :x :stagger? true}] cell-1))
-
-(def image 
-  (tiled-cell->image tile-1 20 [3 3]))
-
-(websocket-send! image)
-
 (let [fur-background "#fffacd"
       ear-color "#f0e68c"
       tongue-red "#f08080"
@@ -202,8 +186,10 @@
       bone-2-color "#e6e6fa"
 
       background-1 "#6495ed"
-      background-2 "#8fbc8f"]
+      background-2 "#8fbc8f"
+      paw-print-color "#4b0082"]
 
+  (defn send []
   (websocket-send!
    (as-> (cell [12 12]
                [;; empty space background
@@ -211,6 +197,7 @@
                 
                 (render (polygon [0 0] [0 12] [6 6]) background-1)
                 (render (polygon [0 0] [12 0] [6 6]) background-2)
+
                 (render (polygon [12 12] [12 0] [6 6]) background-1)
                 (render (polygon [12 12] [0 12] [6 6]) background-2)
 
@@ -265,18 +252,20 @@
                 (render (circle [3 10] 0.75) tooth-color)
 
               ;; paw print core
-                (render (circle [10 2] 1.25) snout-charcoal)
-                (render (circle [8 2] 0.70) snout-charcoal)
-                (render (circle [8.5 3.5] 0.70) snout-charcoal)
-                (render (circle [10 4] 0.70) snout-charcoal)
+                (render (circle [10 2] 1.25) paw-print-color)
+                (render (circle [8 2] 0.70) paw-print-color)
+                (render (circle [8.5 3.5] 0.70) paw-print-color)
+                (render (circle [10 4] 0.70) paw-print-color)
 
               ;; small paw print 1
-                (render (circle [6 11] 0.8) snout-charcoal)
-                (render (circle [5 10] 0.5) snout-charcoal)
-                (render (circle [6 9.5] 0.5) snout-charcoal)
-                (render (circle [7 10] 0.5) snout-charcoal)]) $
+                (render (circle [6 11] 0.8) paw-print-color)
+                (render (circle [5 10] 0.5) paw-print-color)
+                (render (circle [6 9.5] 0.5) paw-print-color)
+                (render (circle [7 10] 0.5) paw-print-color)]) $
      (tile-cell [:glide {:double? true}] $)
      (tile-cell [:mirror {:axis :x :stagger? true}] $)
-     (tiled-cell->image $ 7 [10 10]))))
+     (tiled-cell->image $ 10 [4800 6000])))))
+(send)
 
+;; for downloading canvas as png: https://stackoverflow.com/a/32335649
 (go)
