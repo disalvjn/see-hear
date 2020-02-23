@@ -1,14 +1,6 @@
-(ns see-hear.core
-  (:require [cheshire.core :as json]
+(ns see-hear.core  (:require [cheshire.core :as json]
             [org.httpkit.server :as httpkit]
             [clojure.string :as str]
-            [see-hear.process.particle-creator :as particle-creator]
-            [see-hear.process.particle-mover :as particle-mover]
-            [see-hear.state :as state]
-            [see-hear.render.particle-blob :as particle-blob]
-            [see-hear.render.particle-connector :as particle-connector]
-            [see-hear.view.particle-distance :as particle-distance]
-            [see-hear.render.particle-centroid :as particle-centroid]
             [see-hear.util :as util]
             [clojure.core.match :refer [match]]))
 
@@ -35,12 +27,29 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; todo: handle vertical lines by attaching below? above? to the line?
 
-(defn point [[x y]]
-  {:point/x x, :point/y y})
+(defn point 
+  ([[x y]]
+   {:point/x x, :point/y y})
+  ([x y]
+   {:point/x x, :point/y y}))
 
 (defn translate-point
   [[x y] point]
   (-> point (update :point/x + x) (update :point/y + y)))
+
+(defn rotate-90
+  ;; 2, 1 -> 4, 2
+  [y-max {:keys [point/x point/y]}]
+  (point (- y-max y) x))
+
+(defn rotate-180
+  [x-max y-max p]
+  (->> p (rotate-90 y-max) (rotate-90 x-max)))
+
+(defn rotate-270
+  ;; 2, 1 -> 1, 3
+  [x-max {:keys [point/x point/y]}]
+  (point y (- x-max x)))
 
 (defn reflect-x
   [x-axis {:keys [point/x point/y]}]
@@ -82,17 +91,23 @@
 
 (defmulti tile-cell (fn [[strategy-name options] cell] strategy-name))
 
+(defmulti map-points (fn [f shape] (:shape/type shape)))
+
 (defn apply-grid-to-point 
   [grid-factor point]
     (-> point (update :point/x * grid-factor) (update :point/y * grid-factor)))
 
+(defmethod map-points :polygon
+  [f polygon]
+  (update polygon :polygon/points #(map f %)))
+
 (defmethod apply-grid :polygon
   [grid-factor polygon]
-  (update polygon :polygon/points (partial map (partial apply-grid-to-point grid-factor))))
+  (map-points (partial apply-grid-to-point grid-factor) polygon))
 
 (defmethod translate :polygon
   [coords polygon]
-  (update polygon :polygon/points (partial map (partial translate-point coords))))
+  (map-points (partial translate-point coords) polygon))
 
 (defmethod reflect :polygon
   [axis-type axis-point polygon]
@@ -100,6 +115,10 @@
                      :x (partial reflect-x axis-point)
                      :y (partial reflect-y axis-point))]
   (update polygon :polygon/points #(map reflect-fn %))))
+
+(defmethod map-points :circle
+  [f circle]
+  (update circle :circle/center f))
 
 (defmethod apply-grid :circle
   [grid-factor circle]
@@ -109,7 +128,7 @@
 
 (defmethod translate :circle
   [coords circle]
-  (update circle :circle/center (partial translate-point coords)))
+  (map-points (partial translate-point coords) circle))
 
 (defmethod reflect :circle
   [axis-type axis-point circle]
@@ -130,8 +149,8 @@
 
 (defmethod tile-cell :mirror
   [[_ {:keys [axis stagger?]}] {:keys [cell/grid-x cell/grid-y cell/renders]}]
-  (let [new-y (if (or (= axis :y) stagger?) (* 2 grid-y) grid-y)
-        new-x (if (or (= axis :x) stagger?) (* 2 grid-x) grid-x)
+  (let [new-y (* 2 grid-y)
+        new-x (* 2 grid-x)
         reflect-fn (case axis
                      :x (partial reflect :x grid-x)
                      :y (partial reflect :y grid-y))
@@ -142,21 +161,44 @@
           :y [grid-x (* -1 grid-y)])
         staggered-renders (if stagger? 
                             (concat (map-shapes (partial translate [grid-x grid-y]) renders)
-                                    (map-shapes (partial translate translate-reflected) reflected-renders))) ]
+                                    (map-shapes (partial translate translate-reflected) reflected-renders))
+                            (concat (map-shapes (partial translate (case axis :x [0 grid-y] [grid-x 0])) renders)
+                                    (map-shapes (partial translate (case axis :x [0 grid-y] [grid-x 0])) reflected-renders)))]
     (cell [new-x new-y] (concat renders reflected-renders staggered-renders))))
 
 (defmethod tile-cell :glide
   [[_ {:keys [axis double?]}] {:keys [cell/grid-x cell/grid-y cell/renders]}]
-  (let [new-y (if (or (= axis :y) double?) (* 2 grid-y) grid-y)
-        new-x (if (or (= axis :x) double?) (* 2 grid-x) grid-x)
+  (let [new-y (* 2 grid-y)
+        new-x (* 2 grid-x)
         reflect-over-x (comp (partial translate [grid-x (* -1 grid-y)]) (partial reflect :y grid-y))
         reflect-over-y (comp (partial translate [(* -1 grid-x) grid-y]) (partial reflect :x grid-x))
         double-reflect (comp (partial reflect :x grid-x) (partial reflect :y grid-y))]
     (cell [new-x new-y]
           (concat renders
-                  (if (or double? (= axis :x)) (map-shapes reflect-over-x renders))
-                  (if (or double? (= axis :y)) (map-shapes reflect-over-y renders))
-                  (if double? (map-shapes double-reflect renders))))))
+                  (if (or double? (= axis :x)) 
+                    (map-shapes reflect-over-x renders)
+                    (map-shapes (partial translate [grid-x 0]) renders))
+                  (if (or double? (= axis :y)) 
+                    (map-shapes reflect-over-y renders)
+                    (map-shapes (partial translate [0 grid-y]) renders))
+                  (if double? 
+                    (map-shapes double-reflect renders)
+                    (map-shapes (partial translate [grid-x grid-y]) renders))))))
+
+(defmethod tile-cell :pinwheel
+  [[& _] {:keys [cell/grid-x cell/grid-y cell/renders]}]
+  (let [new-y (* 2 grid-y)
+        new-x (* 2 grid-x)
+        transform-shapes (fn [translate-coordinates point-fn renders]
+                           (map-shapes
+                            (comp (partial translate translate-coordinates)
+                                  (partial map-points point-fn))
+                            renders))]
+    (cell [new-x new-y]
+          (concat renders
+                  (transform-shapes [grid-x 0] (partial rotate-90 grid-y) renders)
+                  (transform-shapes [grid-x grid-y] (partial rotate-180 grid-x grid-y) renders)
+                  (transform-shapes [0 grid-y] (partial rotate-270 grid-x) renders)))))
 
 (defn tiled-cell->image
   [tiled-cell grid-factor [width height]]
@@ -176,96 +218,113 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(let [fur-background "#fffacd"
-      ear-color "#f0e68c"
-      tongue-red "#f08080"
-      snout-charcoal "#4a4a4a"
-      tooth-color "#fffafa"
-      eye-color "#f4a460"
+(defn background
+  [c1 c2 c3 c4]
+  (as->
+   (cell [8 8]
+         [(render (polygon [0 0] [8 0] [8 8] [0 8]) c1)
+          (render (polygon [0 6] [0 8] [2 8]) c2)
+          (render (polygon [6 0] [8 0] [8 2]) c2)
+          (render (polygon [0 0] [0 2] [8 5] [8 2] [6 0]) c3)
+          (render (polygon [0 2] [0 6] [2 8] [5 8] [4 4]) c4)]) $
+     ;; approved sequence
+    (tile-cell [:glide {:axis :x :double? true}] $)
+    (tile-cell [:pinwheel] $)
+    (tiled-cell->image $ 4 [2400 3000])))
 
-      bone-2-color "#e6e6fa"
-
-      background-1 "#6495ed"
-      background-2 "#8fbc8f"
-      paw-print-color "#4b0082"]
-
-  (defn send []
+(let [c1 "aliceblue"
+      c2 "lightskyblue"
+      c3 "lightgreen"
+      c4 "lightseagreen"]
   (websocket-send!
-   (as-> (cell [12 12]
-               [;; empty space background
-    ;          (render (polygon [0 0] [12 12] [12 0]) background-2)
-                
-                (render (polygon [0 0] [0 12] [6 6]) background-1)
-                (render (polygon [0 0] [12 0] [6 6]) background-2)
-
-                (render (polygon [12 12] [12 0] [6 6]) background-1)
-                (render (polygon [12 12] [0 12] [6 6]) background-2)
-
-              ; (render (polygon [0 10] [0 12] [12 12]) background-2)
-              ; (render (polygon [10 0] [12 0] [12 12]) background-1)
-                
-              ;; fur background
-                (render (polygon [0 1] [0 5] [4 7] [7 9] [9 7] [7 4] [5 0] [1 0]) fur-background)
-
-              ;; left eye
-                (render (polygon [2 4] [2 5] [3 5] [3 4]) eye-color)
-              ;; right eye
-                (render (polygon [4 2] [4 3] [5 3] [5 2]) eye-color)
-              ;; left ear
-                (render (polygon [0 2] [0 5] [3 7] [1 2]) ear-color)
-              ;; ear completion by left tongue
-                (render (polygon [7 12] [10 12] [10 11]) ear-color)
-              ;; right ear
-                (render (polygon [2 0] [2 1] [7 3] [5 0]) ear-color)
-              ;; ear completion by right tongue
-                (render (polygon [12 7] [12 10] [11 10]) ear-color)
-
-              ;; tongue
-                (render (polygon [6 6] [6 8] [9 12] [12 12] [12 9] [8 6]) tongue-red)
-              ;; tongue completion above head
-              ; (render (polygon [0 0] [1 0] [0 1]) tongue-red)
-                
-              ;; bone 2 core
-                (render (polygon [9 10] [11 12] [12 12] [12 11] [10 9]) bone-2-color)
-              ;; bone 2 core completion
-                (render (polygon [0 0] [1 0] [0 1]) bone-2-color)
-                (render (circle [9 10] 0.75) bone-2-color)
-                (render (circle [10 9] 0.75) bone-2-color)
-
-
-              ;; snout
-                (render (polygon [4 5] [4.5 6.5] [6.5 4.5] [5 4]) snout-charcoal)
-
-              ;; left tooth
-                (render (translate [-0.5 -0.5] (polygon [5 8] [6 9] [8 10] [6 7])) tooth-color)
-              ;; right tooth
-                (render (translate [-0.5 -0.5] (polygon [8 5] [7 6] [10 8] [9 6])) tooth-color)
-
-
-              ;; left bone core
-                (render (polygon [1 12] [3 10] [2 9] [0 11] [0 12]) tooth-color)
-              ;; left bone core completion
-                (render (polygon [11 0] [12 0] [12 1]) tooth-color)
-              ;; left bone left circle
-                (render (circle [2 9] 0.75) tooth-color)
-              ;; left bone right circle
-                (render (circle [3 10] 0.75) tooth-color)
-
-              ;; paw print core
-                (render (circle [10 2] 1.25) paw-print-color)
-                (render (circle [8 2] 0.70) paw-print-color)
-                (render (circle [8.5 3.5] 0.70) paw-print-color)
-                (render (circle [10 4] 0.70) paw-print-color)
-
-              ;; small paw print 1
-                (render (circle [6 11] 0.8) paw-print-color)
-                (render (circle [5 10] 0.5) paw-print-color)
-                (render (circle [6 9.5] 0.5) paw-print-color)
-                (render (circle [7 10] 0.5) paw-print-color)]) $
-     (tile-cell [:glide {:double? true}] $)
-     (tile-cell [:mirror {:axis :x :stagger? true}] $)
-     (tiled-cell->image $ 10 [4800 6000])))))
-(send)
+   (background c1 c2 c3 c4)))
 
 ;; for downloading canvas as png: https://stackoverflow.com/a/32335649
 (go)
+      ; fur-background "#fffacd"
+      ; ear-color "#f0e68c"
+      ; merged "rosybrown"
+      ; tongue-red merged
+      ; snout-charcoal "#4a4a4a"
+      ; tooth-color fur-background;"#fffafa"
+      ; eye-color "#f4a460"
+
+      ; bone-2-color fur-background ;"#e6e6fa"
+      
+      ; background-1 merged
+      ; background-2 merged
+      ; paw-print-color "#4b0082"
+      ; bone-color paw-print-color
+; (cell [12 12]
+;                [;; empty space background
+;     ;          (render (polygon [0 0] [12 12] [12 0]) background-2)
+                
+;                 (render (polygon [0 0] [0 12] [6 6]) background-1)
+;                 (render (polygon [0 0] [12 0] [6 6]) background-2)
+
+;                 (render (polygon [12 12] [12 0] [6 6]) background-1)
+;                 (render (polygon [12 12] [0 12] [6 6]) background-2)
+
+;               ; (render (polygon [0 10] [0 12] [12 12]) background-2)
+;               ; (render (polygon [10 0] [12 0] [12 12]) background-1)
+                
+;               ;; fur background
+;                 (render (polygon [0 1] [0 5] [4 7] [7 9] [9 7] [7 4] [5 0] [1 0]) fur-background)
+
+;               ;; left eye
+;                 (render (polygon [2 4] [2 5] [3 5] [3 4]) eye-color)
+;               ;; right eye
+;                 (render (polygon [4 2] [4 3] [5 3] [5 2]) eye-color)
+;               ;; left ear
+;                 (render (polygon [0 2] [0 5] [3 7] [1 2]) ear-color)
+;               ;; ear completion by left tongue
+;                 ; (render (polygon [7 12] [10 12] [10 11]) ear-color)
+;               ;; right ear
+;                 (render (polygon [2 0] [2 1] [7 3] [5 0]) ear-color)
+;               ;; ear completion by right tongue
+;                 ; (render (polygon [12 7] [12 10] [11 10]) ear-color)
+                
+;               ;; tongue
+;                 (render (polygon [6 6] [6 8] [9 12] [12 12] [12 9] [8 6]) tongue-red)
+;               ;; tongue completion above head
+;               ; (render (polygon [0 0] [1 0] [0 1]) tongue-red)
+                
+;               ;; bone 2 core
+;                 (render (polygon [9 10] [11 12] [12 12] [12 11] [10 9]) bone-color)
+;               ;; bone 2 core completion
+;                 (render (polygon [0 0] [1 0] [0 1]) bone-color)
+;                 (render (circle [9 10] 0.75) bone-color)
+;                 (render (circle [10 9] 0.75) bone-color)
+
+
+;               ;; snout
+;                 (render (polygon [4 5] [4.5 6.5] [6.5 4.5] [5 4]) bone-color)
+
+;               ;; left tooth
+;                 (render (translate [-0.5 -0.5] (polygon [5 8] [6 9] [7 9] [6 7])) tooth-color)
+;               ;; right tooth
+;                 (render (translate [-0.5 -0.5] (polygon [8 5] [7 6] [9 7] [9 6])) tooth-color)
+
+
+;               ;; left bone core
+;                 (render (polygon [1 12] [3 10] [2 9] [0 11] [0 12]) bone-color)
+;               ;; left bone core completion
+;                 (render (polygon [11 0] [12 0] [12 1]) bone-color)
+;               ;; left bone left circle
+;                 (render (circle [2 9] 0.75) bone-color)
+;               ;; left bone right circle
+;                 (render (circle [3 10] 0.75) bone-color)
+
+;               ;; paw print core
+;                 (render (circle [10 2] 1.25) paw-print-color)
+;                 (render (circle [8 2] 0.70) paw-print-color)
+;                 (render (circle [8.5 3.5] 0.70) paw-print-color)
+;                 (render (circle [10 4] 0.70) paw-print-color)
+
+;               ;; small paw print 1
+;                 (render (circle [6 11] 0.8) paw-print-color)
+;                 (render (circle [5 10] 0.5) paw-print-color)
+;                 (render (circle [6 9.5] 0.5) paw-print-color)
+;                 (render (circle [7 10] 0.5) paw-print-color)
+                
+;                 ])
